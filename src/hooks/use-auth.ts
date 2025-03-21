@@ -3,16 +3,23 @@ import { persist } from 'zustand/middleware';
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
+interface User {
+  id: string;
+  email: string;
+  role: string;
+}
+
 interface AuthState {
   token: string | null;
-  user: any | null;
+  user: User | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  isAdmin: () => boolean;
 }
 
 export const useAuth = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
       user: null,
       login: async (email: string, password: string) => {
@@ -21,17 +28,25 @@ export const useAuth = create<AuthState>()(
             email,
             password,
           });
-          
+
           const { token } = response.data;
-          const user = jwtDecode(token);
-          
-          set({ token, user });
+          const decodedToken = jwtDecode<User>(token);
+
+          if (decodedToken.role !== 'admin') {
+            throw new Error('Unauthorized: Admin access only');
+          }
+
+          set({ token, user: decodedToken });
         } catch (error) {
-          throw new Error('Invalid credentials');
+          throw error;
         }
       },
       logout: () => {
         set({ token: null, user: null });
+      },
+      isAdmin: () => {
+        const state = get();
+        return state.user?.role === 'admin';
       },
     }),
     {
